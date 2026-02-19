@@ -4,8 +4,7 @@
 #include <immintrin.h>
 #include <cmath>
 #include <Eigen/Dense>
-#define TINYOBJLOADER_IMPLEMENTATION 
-#include "tiny_obj_loader.h"
+
 
 struct alignas(32) MeshSoA{
     std::vector<float> x, y, z, w;

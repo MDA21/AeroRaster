@@ -6,7 +6,6 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <unordered_map>
-#define TINYOBJLOADER_IMPLEMENTATION 
 #include "tiny_obj_loader.h"
 
 class Model {
@@ -41,22 +40,22 @@ public:
         if (!err.empty()) std::cerr << "TinyObj Err: " << err << std::endl;
         if (!ret) return false;
 
-        // 2. 准备去重容器
+        //去重容器
         // Map: (OBJ原始索引组合) -> (MeshSoA中的新索引)
         std::unordered_map<VertexKey, uint32_t, VertexKeyHash> uniqueVertices;
 
-        // 预估一下大小，避免频繁 realloc
+        //预估一下大小，避免频繁 realloc
         outMesh.Reserve(attrib.vertices.size() / 3);
 
-        // 3. 遍历所有形状和面
+        //遍历所有形状和面
         for (const auto& shape : shapes) {
             for (const auto& index : shape.mesh.indices) {
-                // 构建 Key
+                //构建 Key
                 VertexKey key = { index.vertex_index, index.texcoord_index };
 
                 // 检查是否已经是已知的顶点组合
                 if (uniqueVertices.count(key) == 0) {
-                    // --- 是新顶点，添加到 SoA ---
+                    //是新顶点，添加到 SoA
 
                     // 读取位置
                     Eigen::Vector3f pos;
@@ -80,7 +79,7 @@ public:
                     outMesh.indices.push_back(newIndex);
                 }
                 else {
-                    // --- 是旧顶点，复用索引 ---
+                    //是旧顶点，复用索引
                     outMesh.indices.push_back(uniqueVertices[key]);
                 }
             }

@@ -11,4 +11,8 @@ int main() {
 		std::cerr << "Failed to load model." << std::endl;
 		return -1;
 	}
+
+	MeshSoA transformedMesh;
+	transformedMesh.Reserve(mesh.GetVertexCount());
+
 }
