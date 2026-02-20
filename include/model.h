@@ -57,7 +57,7 @@ public:
                 if (uniqueVertices.count(key) == 0) {
                     //是新顶点，添加到 SoA
 
-                    // 读取位置
+                    //读取位置
                     Eigen::Vector3f pos;
                     pos.x() = attrib.vertices[3 * index.vertex_index + 0];
                     pos.y() = attrib.vertices[3 * index.vertex_index + 1];
@@ -85,7 +85,7 @@ public:
             }
         }
 
-        // 4. 关键步骤：AVX2 Padding
+        //AVX2 Padding
         outMesh.PadToAlign8();
 
         std::cout << "Loaded OBJ: " << filename << "\n"

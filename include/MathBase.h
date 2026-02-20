@@ -5,6 +5,9 @@
 #include <cmath>
 #include <Eigen/Dense>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 struct alignas(32) MeshSoA{
     std::vector<float> x, y, z, w;
@@ -44,7 +47,7 @@ struct alignas(32) MeshSoA{
         if (padding_count > 0) {
             for (size_t i = 0; i < padding_count; ++i) {
                 x.push_back(0.0f); y.push_back(0.0f); z.push_back(0.0f);
-                w.push_back(0.0f); // W=0 意味着它会在透视除法产生 NaN/Inf，或者被视锥裁剪掉
+                w.push_back(0.0f); //W=0 意味着它会在透视除法产生 NaN/Inf，或者被视锥裁剪掉
                 u.push_back(0.0f); v.push_back(0.0f);
             }
             std::cout << "Mesh padded with " << padding_count << " dummy vertices." << std::endl;
@@ -53,8 +56,10 @@ struct alignas(32) MeshSoA{
 };
 
 using Matrix4f = Eigen::Matrix4f;
+using Vector4f = Eigen::Vector4f;
+using Vector3f = Eigen::Vector3f;
 
-void transformVerticesAVX2(const MeshSoA& in, MeshSoA& out, const Matrix4f& mat) {
+void TransformVerticesAVX2(const MeshSoA& in, MeshSoA& out, const Matrix4f& mat) {
     size_t count = in.GetVertexCount();
 
     //x分量
@@ -117,4 +122,46 @@ void transformVerticesAVX2(const MeshSoA& in, MeshSoA& out, const Matrix4f& mat)
 		_mm256_storeu_ps(&out.z[i], res_z);
 		_mm256_storeu_ps(&out.w[i], res_w);
     }
+}
+
+void PerspectiveDivideAVX2(MeshSoA& mesh) {
+	size_t count = mesh.GetVertexCount();
+
+    for(size_t i = 0; i < count; i += 8) {
+        __m256 x = _mm256_loadu_ps(&mesh.x[i]);
+        __m256 y = _mm256_loadu_ps(&mesh.y[i]);
+        __m256 z = _mm256_loadu_ps(&mesh.z[i]);
+        __m256 w = _mm256_loadu_ps(&mesh.w[i]);
+        //计算1/w
+        __m256 inv_w = _mm256_div_ps(_mm256_set1_ps(1.0f), w);
+        //计算透视除法后的坐标
+        x = _mm256_mul_ps(x, inv_w);
+        y = _mm256_mul_ps(y, inv_w);
+        z = _mm256_mul_ps(z, inv_w);
+        //存储结果
+        _mm256_storeu_ps(&mesh.x[i], x);
+        _mm256_storeu_ps(&mesh.y[i], y);
+        _mm256_storeu_ps(&mesh.z[i], z);
+		_mm256_store_ps(&mesh.w[i], inv_w); //W分量存储1/w，可以在后续的光栅化阶段用于深度测试等用途
+	}
+}
+
+void ViewportTransformAVX2(MeshSoA& mesh, float width, float height) {
+	size_t count = mesh.GetVertexCount();
+    __m256 half_width = _mm256_set1_ps(width * 0.5f);
+    __m256 half_height = _mm256_set1_ps(height * 0.5f);
+
+    for(size_t i = 0; i < count; i += 8) {
+        __m256 x = _mm256_loadu_ps(&mesh.x[i]);
+        __m256 y = _mm256_loadu_ps(&mesh.y[i]);
+        __m256 z = _mm256_loadu_ps(&mesh.z[i]);
+
+        //视口变换
+        x = _mm256_fmadd_ps(x, half_width, half_width);   // x' = (x + 1) * (width / 2)
+        y = _mm256_fnmadd_ps(y, half_height, half_height); // y' = (1 - y) * (height / 2)
+        //存储结果
+        _mm256_storeu_ps(&mesh.x[i], x);
+        _mm256_storeu_ps(&mesh.y[i], y);
+        _mm256_storeu_ps(&mesh.z[i], z); // Z值不变，仍然在[-1,1]范围内，可以用于深度测试
+	}
 }
