@@ -298,7 +298,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
     float areaDouble = dx01 * dy20 - dx20 * dy01;
 
     // 自动修正三角形方向：如果是 CCW (area < 0)，则翻转为 CW
-    if (areaDouble < 0.0f) {
+    if (areaDouble > 0.0f) {
         std::swap(x1, x2); std::swap(y1, y2); std::swap(z1, z2); std::swap(w1, w2);
         std::swap(u1, u2); std::swap(v1, v2);
 
@@ -309,7 +309,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
         areaDouble = -areaDouble;
     }
 
-    if (areaDouble <= 0.0f) return; // 面积为 0，剔除
+    if (areaDouble >= 0.0f) return; // 面积为 0，剔除
 
     int triMinX = std::max(0, (int)std::floor(std::min({ x0, x1, x2 })));
     int triMaxX = std::min(fb.width - 1, (int)std::ceil(std::max({ x0, x1, x2 })));
@@ -385,9 +385,9 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
             __m256 eval1_bias = _mm256_add_ps(eval1, v_bias1);
             __m256 eval2_bias = _mm256_add_ps(eval2, v_bias2);
 
-            __m256 mask0 = _mm256_cmp_ps(eval0_bias, _mm256_setzero_ps(), _CMP_LE_OQ);
-            __m256 mask1 = _mm256_cmp_ps(eval1_bias, _mm256_setzero_ps(), _CMP_LE_OQ);
-            __m256 mask2 = _mm256_cmp_ps(eval2_bias, _mm256_setzero_ps(), _CMP_LE_OQ);
+            __m256 mask0 = _mm256_cmp_ps(eval0_bias, _mm256_setzero_ps(), _CMP_GE_OQ);
+            __m256 mask1 = _mm256_cmp_ps(eval1_bias, _mm256_setzero_ps(), _CMP_GE_OQ);
+            __m256 mask2 = _mm256_cmp_ps(eval2_bias, _mm256_setzero_ps(), _CMP_GE_OQ);
 
             __m256 finalMask = _mm256_and_ps(_mm256_and_ps(mask0, mask1), mask2);
 
