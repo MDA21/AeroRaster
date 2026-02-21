@@ -11,7 +11,7 @@ public:
 		float cosA = std::cos(rad);
 		float sinA = std::sin(rad);
 
-		Matrix4f rotation;
+		Matrix4f rotation = Matrix4f::Identity();
 		rotation(0, 0) = cosA;
 		rotation(0, 2) = sinA;
 		rotation(2, 0) = -sinA;

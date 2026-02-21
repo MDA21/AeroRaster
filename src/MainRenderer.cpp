@@ -6,6 +6,8 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <cstdio>
+#include <limits>
+#include <cmath>
 
 int main() {
 	MeshSoA mesh;
@@ -18,8 +20,8 @@ int main() {
 	transformedMesh.Resize(mesh.GetVertexCount());
 
 	int frameCount = 0;
-	float width = 800.0f;
-	float height = 600.0f;
+	float width = 600.0f;
+	float height = 800.0f;
 	Framebuffer fb(width, height);
 
 	const int MAX_FRAMES = 10;
@@ -34,6 +36,36 @@ int main() {
 		PerspectiveDivideAVX2(transformedMesh);
 
 		ViewportTransformAVX2(transformedMesh, width, height);
+
+        float minTx = std::numeric_limits<float>::infinity();
+        float minTy = std::numeric_limits<float>::infinity();
+        float minTz = std::numeric_limits<float>::infinity();
+        float minTw = std::numeric_limits<float>::infinity();
+        float maxTx = -std::numeric_limits<float>::infinity();
+        float maxTy = -std::numeric_limits<float>::infinity();
+        float maxTz = -std::numeric_limits<float>::infinity();
+        float maxTw = -std::numeric_limits<float>::infinity();
+        size_t nonFiniteCount = 0;
+        for (size_t i = 0; i < transformedMesh.GetVertexCount(); ++i) {
+            float x = transformedMesh.x[i];
+            float y = transformedMesh.y[i];
+            float z = transformedMesh.z[i];
+            float w = transformedMesh.w[i];
+            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(w)) {
+                nonFiniteCount++;
+                continue;
+            }
+            minTx = std::min(minTx, x);
+            minTy = std::min(minTy, y);
+            minTz = std::min(minTz, z);
+            minTw = std::min(minTw, w);
+            maxTx = std::max(maxTx, x);
+            maxTy = std::max(maxTy, y);
+            maxTz = std::max(maxTz, z);
+            maxTw = std::max(maxTw, w);
+        }
+
+        size_t invalidBBoxCount = 0;
 
         size_t indexCount = mesh.indices.size();
         for (size_t i = 0; i < indexCount; i += 3) {
@@ -54,13 +86,36 @@ int main() {
             int minY = std::max(0, (int)std::floor(std::min({ y0, y1, y2 })));
             int maxY = std::min(fb.height - 1, (int)std::ceil(std::max({ y0, y1, y2 })));
 
-            if (minX > maxX || minY > maxY) continue;
+            if (minX > maxX || minY > maxY) {
+                invalidBBoxCount++;
+                continue;
+            }
 
             RasterizeTriangleAVX(fb,
                 x0, y0, z0, x1, y1, z1, x2, y2, z2,
                 w0, w1, w2, u0, u1, u2, v0, v1, v2,
                 minX, maxX, minY, maxY);
         }
+
+        size_t colorChanged = 0;
+        for (uint32_t c : fb.colorBuffer) {
+            if (c != 0x202020) colorChanged++;
+        }
+        size_t depthChanged = 0;
+        for (float d : fb.depthBuffer) {
+            if (d != 1.0f) depthChanged++;
+        }
+        std::cout
+            << "Stats frame " << frameCount
+            << " nonFinite=" << nonFiniteCount
+            << " invalidBBox=" << invalidBBoxCount
+            << " colorChanged=" << colorChanged
+            << " depthChanged=" << depthChanged
+            << " x=[" << minTx << "," << maxTx << "]"
+            << " y=[" << minTy << "," << maxTy << "]"
+            << " z=[" << minTz << "," << maxTz << "]"
+            << " w=[" << minTw << "," << maxTw << "]"
+            << std::endl;
 
         char filename[64];
         std::snprintf(filename, sizeof(filename), "output_frame_%02d.ppm", frameCount);

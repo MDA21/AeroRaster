@@ -72,28 +72,28 @@ void TransformVerticesAVX2(const MeshSoA& in, MeshSoA& out, const Matrix4f& mat)
     size_t count = in.GetVertexCount();
 
     //x分量
-	__m256 m00 = _mm256_set1_ps(mat(0, 0));
-    __m256 m10 = _mm256_set1_ps(mat(1, 0));
-	__m256 m20 = _mm256_set1_ps(mat(2, 0));
-    __m256 m30 = _mm256_set1_ps(mat(3, 0));
+    __m256 m00 = _mm256_set1_ps(mat(0, 0));
+    __m256 m10 = _mm256_set1_ps(mat(0, 1));
+    __m256 m20 = _mm256_set1_ps(mat(0, 2));
+    __m256 m30 = _mm256_set1_ps(mat(0, 3));
 
 	//y分量
-	__m256 m01 = _mm256_set1_ps(mat(0, 1));
-	__m256 m11 = _mm256_set1_ps(mat(1, 1));
-	__m256 m21 = _mm256_set1_ps(mat(2, 1));
-	__m256 m31 = _mm256_set1_ps(mat(3, 1));
+    __m256 m01 = _mm256_set1_ps(mat(1, 0));
+    __m256 m11 = _mm256_set1_ps(mat(1, 1));
+    __m256 m21 = _mm256_set1_ps(mat(1, 2));
+    __m256 m31 = _mm256_set1_ps(mat(1, 3));
 
     //z分量
-	__m256 m02 = _mm256_set1_ps(mat(0, 2));
-	__m256 m12 = _mm256_set1_ps(mat(1, 2));
-	__m256 m22 = _mm256_set1_ps(mat(2, 2));
-    __m256 m32 = _mm256_set1_ps(mat(3, 2));
+    __m256 m02 = _mm256_set1_ps(mat(2, 0));
+    __m256 m12 = _mm256_set1_ps(mat(2, 1));
+    __m256 m22 = _mm256_set1_ps(mat(2, 2));
+    __m256 m32 = _mm256_set1_ps(mat(2, 3));
 
 	//w分量
-	__m256 m03 = _mm256_set1_ps(mat(0, 3));
-	__m256 m13 = _mm256_set1_ps(mat(1, 3));
-	__m256 m23 = _mm256_set1_ps(mat(2, 3));
-	__m256 m33 = _mm256_set1_ps(mat(3, 3));
+    __m256 m03 = _mm256_set1_ps(mat(3, 0));
+    __m256 m13 = _mm256_set1_ps(mat(3, 1));
+    __m256 m23 = _mm256_set1_ps(mat(3, 2));
+    __m256 m33 = _mm256_set1_ps(mat(3, 3));
 
     for (size_t i = 0; i < count; i += 8) {
 
@@ -142,7 +142,8 @@ void PerspectiveDivideAVX2(MeshSoA& mesh) {
         __m256 z = _mm256_loadu_ps(&mesh.z[i]);
         __m256 w = _mm256_loadu_ps(&mesh.w[i]);
 
-        __m256 inv_w = _mm256_div_ps(_mm256_set1_ps(1.0f), w);
+        __m256 inv_w = _mm256_rcp_ps(w);
+		inv_w = _mm256_mul_ps(_mm256_sub_ps(_mm256_set1_ps(2.0f), _mm256_mul_ps(w, inv_w)), inv_w);//使用牛顿迭代法提高精度
 
         x = _mm256_mul_ps(x, inv_w);
         y = _mm256_mul_ps(y, inv_w);
@@ -180,27 +181,38 @@ inline float GetEdgeBias(float dx, float dy) {
     return isTopLeft ? 0.0f : -0.00001f;
 }
 
-void RasterizeTriangleAVX(
-	Framebuffer& fb,
-	float x0, float y0, float z0, float x1, float y1, float z1, float x2, float y2, float z2,
-    float w0, float w1, float w2,
-    float u0, float u1, float u2,
-    float v0, float v1, float v2,
-    int minX, int maxX, int minY, int maxY)
-{
+void RasterizeTriangleAVX(Framebuffer& fb, float x0, float y0, float z0, float x1, float y1, float z1, float x2, float y2, float z2, float w0, float w1, float w2, float u0, float u1, float u2, float v0, float v1, float v2, int minX, int maxX, int minY, int maxY) {
+    float dx01 = x1 - x0, dy01 = y1 - y0;
+    float dx12 = x2 - x1, dy12 = y2 - y1;
+    float dx20 = x0 - x2, dy20 = y0 - y2;
+
+    float areaDouble = dx12 * (y0 - y1) - dy12 * (x0 - x1);
+
+    //视口变换之后，三角形的绕序反了
+    if (areaDouble <= 0.0f) {
+        if (areaDouble == 0.0f) return;
+
+        float tx = x1; x1 = x2; x2 = tx;
+        float ty = y1; y1 = y2; y2 = ty;
+        float tz = z1; z1 = z2; z2 = tz;
+        float tw = w1; w1 = w2; w2 = tw;
+        float tu = u1; u1 = u2; u2 = tu;
+        float tv = v1; v1 = v2; v2 = tv;
+
+        dx01 = x1 - x0; dy01 = y1 - y0;
+        dx12 = x2 - x1; dy12 = y2 - y1;
+        dx20 = x0 - x2; dy20 = y0 - y2;
+
+        areaDouble = dx12 * (y0 - y1) - dy12 * (x0 - x1);
+        if (areaDouble <= 0.0f) return;
+    }
+
     float preU0 = u0 * w0;
     float preU1 = u1 * w1;
     float preU2 = u2 * w2;
     float preV0 = v0 * w0;
     float preV1 = v1 * w1;
     float preV2 = v2 * w2;
-
-    float dx01 = x1 - x0, dy01 = y1 - y0;
-    float dx12 = x2 - x1, dy12 = y2 - y1;
-    float dx20 = x0 - x2, dy20 = y0 - y2;
-
-    float areaDouble = dx01 * dy20 - dx20 * dy01;
-    if (areaDouble <= 0.0f) return;
 
     float invArea = 1.0f / areaDouble;
     __m256 v_invArea = _mm256_set1_ps(invArea);
@@ -304,7 +316,7 @@ void RasterizeTriangleAVX(
                 uint8_t color = check ? 220 : 80;
 
                 float depthVal = std::max(0.0f, std::min(z_arr[i], 1.0f));
-                color = (uint8_t)(color * (1.0f - depthVal));
+                (void)depthVal;
 
                 fb.colorBuffer[pixelIdx] = (color << 16) | (color << 8) | color;
             }
