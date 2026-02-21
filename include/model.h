@@ -3,6 +3,7 @@
 #include <vector>
 #include <immintrin.h>
 #include "ComputeBase.h"
+#include "Mesh.h"
 #include <Eigen/Dense>
 #include <cmath>
 #include <unordered_map>

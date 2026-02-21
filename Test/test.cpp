@@ -5,7 +5,7 @@
 
 void print_avx(__m256 v) {
 	float temp[8];
-	_mm256_storeu_ps(temp, v); // 将寄存器内容存回内存
+	_mm256_storeu_ps(temp, v); // Store AVX data to memory
 	std::cout << "[ ";
 	for (int i = 0; i < 8; ++i) std::cout << temp[i] << " ";
 	std::cout << "]" << std::endl;
