@@ -16,28 +16,28 @@
 void TransformVerticesAVX2(const MeshSoA& in, MeshSoA& out, const Matrix4f& mat) {
     size_t count = in.GetVertexCount();
 
-    //x分量
-	__m256 m00 = _mm256_set1_ps(mat(0, 0));
-    __m256 m10 = _mm256_set1_ps(mat(1, 0));
-	__m256 m20 = _mm256_set1_ps(mat(2, 0));
-    __m256 m30 = _mm256_set1_ps(mat(3, 0));
+    // Row 0 - used for x_out
+	__m256 m00 = _mm256_set1_ps(mat(0, 0)); // x coeff
+    __m256 m01 = _mm256_set1_ps(mat(0, 1)); // y coeff
+	__m256 m02 = _mm256_set1_ps(mat(0, 2)); // z coeff
+    __m256 m03 = _mm256_set1_ps(mat(0, 3)); // w coeff
 
-	//y分量
-	__m256 m01 = _mm256_set1_ps(mat(0, 1));
+	// Row 1 - used for y_out
+	__m256 m10 = _mm256_set1_ps(mat(1, 0));
 	__m256 m11 = _mm256_set1_ps(mat(1, 1));
-	__m256 m21 = _mm256_set1_ps(mat(2, 1));
-	__m256 m31 = _mm256_set1_ps(mat(3, 1));
-
-    //z分量
-	__m256 m02 = _mm256_set1_ps(mat(0, 2));
 	__m256 m12 = _mm256_set1_ps(mat(1, 2));
-	__m256 m22 = _mm256_set1_ps(mat(2, 2));
-    __m256 m32 = _mm256_set1_ps(mat(3, 2));
-
-	//w分量
-	__m256 m03 = _mm256_set1_ps(mat(0, 3));
 	__m256 m13 = _mm256_set1_ps(mat(1, 3));
-	__m256 m23 = _mm256_set1_ps(mat(2, 3));
+
+    // Row 2 - used for z_out
+	__m256 m20 = _mm256_set1_ps(mat(2, 0));
+	__m256 m21 = _mm256_set1_ps(mat(2, 1));
+	__m256 m22 = _mm256_set1_ps(mat(2, 2));
+    __m256 m23 = _mm256_set1_ps(mat(2, 3));
+
+	// Row 3 - used for w_out
+	__m256 m30 = _mm256_set1_ps(mat(3, 0));
+	__m256 m31 = _mm256_set1_ps(mat(3, 1));
+	__m256 m32 = _mm256_set1_ps(mat(3, 2));
 	__m256 m33 = _mm256_set1_ps(mat(3, 3));
 
     for (size_t i = 0; i < count; i += 8) {
@@ -45,30 +45,32 @@ void TransformVerticesAVX2(const MeshSoA& in, MeshSoA& out, const Matrix4f& mat)
         __m256 vx = _mm256_loadu_ps(&in.x[i]);
 		__m256 vy = _mm256_loadu_ps(&in.y[i]);
 		__m256 vz = _mm256_loadu_ps(&in.z[i]);
+        // Assume w is 1.0 for input vertices, usually correct for obj models
+        // But better be safe if input has w
 
-        //计算x
-        __m256 res_x = m30;
+        // Calculate x_out = x*M00 + y*M01 + z*M02 + 1*M03
+        __m256 res_x = m03; // Start with translation (w*M03 where w=1)
 		res_x = _mm256_fmadd_ps(vx, m00, res_x);
-		res_x = _mm256_fmadd_ps(vy, m10, res_x);
-		res_x = _mm256_fmadd_ps(vz, m20, res_x);
+		res_x = _mm256_fmadd_ps(vy, m01, res_x);
+		res_x = _mm256_fmadd_ps(vz, m02, res_x);
 
-		//计算y
-		__m256 res_y = m31;
-		res_y = _mm256_fmadd_ps(vx, m01, res_y);
+		// Calculate y_out = x*M10 + y*M11 + z*M12 + 1*M13
+		__m256 res_y = m13;
+		res_y = _mm256_fmadd_ps(vx, m10, res_y);
 		res_y = _mm256_fmadd_ps(vy, m11, res_y);
-		res_y = _mm256_fmadd_ps(vz, m21, res_y);
+		res_y = _mm256_fmadd_ps(vz, m12, res_y);
 
-		//计算z
-        __m256 res_z = m32;
-		res_z = _mm256_fmadd_ps(vx, m02, res_z);
-		res_z = _mm256_fmadd_ps(vy, m12, res_z);
+		// Calculate z_out = x*M20 + y*M21 + z*M22 + 1*M23
+        __m256 res_z = m23;
+		res_z = _mm256_fmadd_ps(vx, m20, res_z);
+		res_z = _mm256_fmadd_ps(vy, m21, res_z);
 		res_z = _mm256_fmadd_ps(vz, m22, res_z);
 
-        //计算w
+        // Calculate w_out = x*M30 + y*M31 + z*M32 + 1*M33
 		__m256 res_w = m33;
-		res_w = _mm256_fmadd_ps(vx, m03, res_w);
-		res_w = _mm256_fmadd_ps(vy, m13, res_w);
-        res_w = _mm256_fmadd_ps(vz, m23, res_w);
+		res_w = _mm256_fmadd_ps(vx, m30, res_w);
+		res_w = _mm256_fmadd_ps(vy, m31, res_w);
+        res_w = _mm256_fmadd_ps(vz, m32, res_w);
 
         //存储结果
 		_mm256_storeu_ps(&out.x[i], res_x);
@@ -145,7 +147,24 @@ void RasterizeTriangleAVX(
     float dx20 = x0 - x2, dy20 = y0 - y2;
 
     float areaDouble = dx01 * dy20 - dx20 * dy01;
-    if (areaDouble <= 0.0f) return;
+    if (areaDouble <= 0.0f) {
+        if (areaDouble == 0.0f) return;
+
+        float tx = x1; x1 = x2; x2 = tx;
+        float ty = y1; y1 = y2; y2 = ty;
+        float tz = z1; z1 = z2; z2 = tz;
+        float tw = w1; w1 = w2; w2 = tw;
+        float tu = u1; u1 = u2; u2 = tu;
+        float tv = v1; v1 = v2; v2 = tv;
+
+        dx01 = x1 - x0; dy01 = y1 - y0;
+        dx12 = x2 - x1; dy12 = y2 - y1;
+        dx20 = x0 - x2; dy20 = y0 - y2;
+
+        areaDouble = dx12 * (y0 - y1) - dy12 * (x0 - x1);
+        if (areaDouble <= 0.0f) return;
+    }
+
 
     float invArea = 1.0f / areaDouble;
     __m256 v_invArea = _mm256_set1_ps(invArea);
@@ -257,7 +276,8 @@ void RasterizeTriangleAVX(
     }
 }
 
-inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const MeshSoA& transformedMesh, uint32_t triIdx, const Tile& tile) {
+inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const MeshSoA& transformedMesh, uint32_t triIdx, const Tile& tile,
+    long long& colorChanged, long long& depthChanged, long long& invalidBBoxCount, long long& trianglePassedCount, long long& maskValidCount) {
     uint32_t i0 = mesh.indices[triIdx];
     uint32_t i1 = mesh.indices[triIdx + 1];
     uint32_t i2 = mesh.indices[triIdx + 2];
@@ -277,8 +297,8 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
 
     float areaDouble = dx01 * dy20 - dx20 * dy01;
 
-    if (areaDouble <= 0.0f) {
-        if (areaDouble == 0.0f) return;
+    // 自动修正三角形方向：如果是 CCW (area < 0)，则翻转为 CW
+    if (areaDouble < 0.0f) {
         std::swap(x1, x2); std::swap(y1, y2); std::swap(z1, z2); std::swap(w1, w2);
         std::swap(u1, u2); std::swap(v1, v2);
 
@@ -286,9 +306,10 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
         dx12 = x2 - x1; dy12 = y2 - y1;
         dx20 = x0 - x2; dy20 = y0 - y2;
 
-        areaDouble = dx01 * dy20 - dx20 * dy01;
-        if (areaDouble <= 0.0f) return;
+        areaDouble = -areaDouble;
     }
+
+    if (areaDouble <= 0.0f) return; // 面积为 0，剔除
 
     int triMinX = std::max(0, (int)std::floor(std::min({ x0, x1, x2 })));
     int triMaxX = std::min(fb.width - 1, (int)std::ceil(std::max({ x0, x1, x2 })));
@@ -301,7 +322,12 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
     int minY = std::max(triMinY, tile.startY);
     int maxY = std::min(triMaxY, tile.endY);
 
-    if (minX > maxX || minY > maxY) return; // 再次确保交集有效
+    if (minX > maxX || minY > maxY) {
+        invalidBBoxCount++;
+        return; // 再次确保交集有效
+    }
+
+    trianglePassedCount++;
 
     // 注意：TILE_SIZE 是 64（4的倍数），所以 tile.startX 也是 4的倍数。
     // 这里的按位与操作只会把 minX 对齐到 Tile 内部或边界的像素块起点，绝不会越界到左侧 Tile！
@@ -359,14 +385,16 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
             __m256 eval1_bias = _mm256_add_ps(eval1, v_bias1);
             __m256 eval2_bias = _mm256_add_ps(eval2, v_bias2);
 
-            __m256 mask0 = _mm256_cmp_ps(eval0_bias, _mm256_setzero_ps(), _CMP_GE_OQ);
-            __m256 mask1 = _mm256_cmp_ps(eval1_bias, _mm256_setzero_ps(), _CMP_GE_OQ);
-            __m256 mask2 = _mm256_cmp_ps(eval2_bias, _mm256_setzero_ps(), _CMP_GE_OQ);
+            __m256 mask0 = _mm256_cmp_ps(eval0_bias, _mm256_setzero_ps(), _CMP_LE_OQ);
+            __m256 mask1 = _mm256_cmp_ps(eval1_bias, _mm256_setzero_ps(), _CMP_LE_OQ);
+            __m256 mask2 = _mm256_cmp_ps(eval2_bias, _mm256_setzero_ps(), _CMP_LE_OQ);
 
             __m256 finalMask = _mm256_and_ps(_mm256_and_ps(mask0, mask1), mask2);
 
             int maskBit = _mm256_movemask_ps(finalMask);
             if (maskBit == 0) continue; // 如果 8 个像素都不在三角形内，直接跳过计算
+
+            maskValidCount++;
 
             //计算重心坐标 lambda
             __m256 lambda0 = _mm256_mul_ps(eval0, v_invArea);
@@ -398,6 +426,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
                 //深度测试
                 if (z_arr[i] >= fb.depthBuffer[pixelIdx]) continue;
                 fb.depthBuffer[pixelIdx] = z_arr[i];
+                depthChanged++;
 
                 //延迟透视校正
                 //只有通过了深度测试的像素，才舍得花算力去计算 1/W 和 UV
@@ -426,6 +455,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
                 color = (uint8_t)(color * (1.0f - depthVal));
 
                 fb.colorBuffer[pixelIdx] = (color << 16) | (color << 8) | color;
+                colorChanged++;
             }
         }
     }
