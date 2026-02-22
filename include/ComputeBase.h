@@ -295,10 +295,13 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
     float dx12 = x2 - x1, dy12 = y2 - y1;
     float dx20 = x0 - x2, dy20 = y0 - y2;
 
-    float areaDouble = dx01 * dy20 - dx20 * dy01;
+    float areaDouble = dx12 * (y0 - y1) - dy12 * (x0 - x1);
 
-    // 自动修正三角形方向：如果是 CCW (area < 0)，则翻转为 CW
-    if (areaDouble > 0.0f) {
+    // 统一绕序为 CCW (area > 0)
+    // 如果是 CW (area <= 0)，则翻转为 CCW，实现双面渲染
+    if (areaDouble <= 0.0f) {
+        if (areaDouble == 0.0f) return;
+
         std::swap(x1, x2); std::swap(y1, y2); std::swap(z1, z2); std::swap(w1, w2);
         std::swap(u1, u2); std::swap(v1, v2);
 
@@ -306,10 +309,9 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
         dx12 = x2 - x1; dy12 = y2 - y1;
         dx20 = x0 - x2; dy20 = y0 - y2;
 
-        areaDouble = -areaDouble;
+        areaDouble = dx12 * (y0 - y1) - dy12 * (x0 - x1);
+        if (areaDouble <= 0.0f) return;
     }
-
-    if (areaDouble >= 0.0f) return; // 面积为 0，剔除
 
     int triMinX = std::max(0, (int)std::floor(std::min({ x0, x1, x2 })));
     int triMaxX = std::min(fb.width - 1, (int)std::ceil(std::max({ x0, x1, x2 })));
@@ -451,8 +453,8 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
                 int check = ((int)(u * 20.0f) + (int)(v * 20.0f)) % 2;
                 uint8_t color = check ? 220 : 80;
 
-                float depthVal = std::max(0.0f, std::min(z_arr[i], 1.0f));
-                color = (uint8_t)(color * (1.0f - depthVal));
+                //float depthVal = std::max(0.0f, std::min(z_arr[i], 1.0f));
+                //color = (uint8_t)(color * (1.0f - depthVal));
 
                 fb.colorBuffer[pixelIdx] = (color << 16) | (color << 8) | color;
                 colorChanged++;
