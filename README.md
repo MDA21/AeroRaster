@@ -9,7 +9,7 @@
 
 本项目基于 **Eigen** 处理线性代数运算，利用 **tinyobjloader** 与 **stb_image** 处理资产管线，将核心工程精力完全聚焦于**光栅化管线 (Rasterization Pipeline)** 的微架构级优化、**数据导向设计 (DOD)** 以及 **AVX2 SIMD 指令集** 的极限吞吐量挖掘。
 
-## 🚀 核心特性与性能高光
+## 核心特性与性能高光
 
 在 Intel Core i7-12650H (Alder Lake) 上，渲染 Diablo3 角色（3.2k 顶点，5k 三角形，Blinn-Phong 光照，1024x1024 漫反射/法线/高光贴图），性能表现如下：
 
@@ -22,9 +22,9 @@
 
 ---
 
-## 🏗️ 架构解析 (Architecture)
+## 架构解析 
 
-### 1. 极致的数据导向设计 (DOD)
+### 1. 数据导向设计 (DOD)
 虽然使用 `tinyobjloader` 加载标准 OBJ 模型，但 AeroRaster 在加载后立即将数据转换为严格的 **Structure of Arrays (SoA)** 布局 (`MeshSoA`)，并强制内存向 32 字节（AVX2 寄存器宽度）对齐：
 - **L1 Cache 亲和性**：连续的内存布局使得预取器（Hardware Prefetcher）能完美工作。
 - **Zero-Overhead Loading**：数据无需重排即可直接加载到 YMM 寄存器 (`_mm256_load_ps`)。
@@ -47,9 +47,9 @@ AeroRaster 实现了一个轻量级**无锁任务系统 (JobSystem)**：
 
 ---
 
-##  依赖项 (Dependencies)
+##  依赖项 
 
-本项目坚持“不重复造轮子，但造最好的引擎”原则，使用了以下高质量的轻量级单头文件库（Header-only Libraries）：
+坚持“不重复造轮子，但造最好的引擎”原则，使用了以下高质量的轻量级单头文件库（Header-only Libraries）：
 
 *   **[Eigen](https://eigen.tuxfamily.org/)**: 高性能线性代数库，提供基础的矩阵与向量运算支持（SIMD 友好）。
 *   **[tinyobjloader](https://github.com/tinyobjloader/tinyobjloader)**: 快速、鲁棒的 Wavefront .obj 模型加载器。
@@ -57,7 +57,7 @@ AeroRaster 实现了一个轻量级**无锁任务系统 (JobSystem)**：
 
 ---
 
-## 🛠️ 构建与运行 (Build & Run)
+## 构建与运行
 
 ### 环境要求
 *   CPU: 支持 AVX2 指令集 (Intel Haswell 及以上, AMD Ryzen 及以上)
