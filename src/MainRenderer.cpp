@@ -29,10 +29,13 @@ int main() {
 	Framebuffer fb(width, height);
 	TileGrid tileGrid(width, height, 64);
 
-	JobSystem jobSystem;
+	//JobSystem jobSystem(1);
+	JobSystem jobSystem(std::thread::hardware_concurrency());
 	std::cout << "[Init] JobSystem started with " << jobSystem.GetThreadCount() << " threads." << std::endl;
 
-	const int MAX_FRAMES = 10;
+	double geomTime = 0.0;
+	double rasterTime = 0.0;
+	const int MAX_FRAMES = 100;
 
 	std::chrono::high_resolution_clock::time_point startTime = std::chrono::high_resolution_clock::now();
 
@@ -40,6 +43,9 @@ int main() {
 
         fb.Clear();
 		Matrix4f mvp = Camera::ComputeMVP(width, height, frameCount);
+
+		//记录几何处理时间
+		auto t_geom_start = std::chrono::high_resolution_clock::now();
 
 		TransformVerticesAVX2(mesh, transformedMesh, mvp);
 
@@ -52,6 +58,9 @@ int main() {
 		tileGrid.ClearBins();
 		tileGrid.BinTriangles(mesh, transformedMesh, width, height);
 
+		auto t_geom_end = std::chrono::high_resolution_clock::now();
+		geomTime += std::chrono::duration<double>(t_geom_end - t_geom_start).count();
+
 		std::vector<uint32_t> acticeTileIndices;
 		acticeTileIndices.reserve(tileGrid.tiles.size());
 		for(size_t i = 0; i < tileGrid.tiles.size(); ++i) {
@@ -60,26 +69,31 @@ int main() {
 			}
 		}
 
-		for (auto& tile : tileGrid.tiles) {
-			if (tile.triangleIndices.empty()) continue;
-            for (uint32_t triIdx : tile.triangleIndices) {
-                RasterizeTriangleForTile(fb, mesh, transformedMesh, triIdx, tile);
-            }
-		}
+		//记录光栅化时间
+		auto t_raster_start = std::chrono::high_resolution_clock::now();
 
-		
+		jobSystem.Dispatch((uint32_t)acticeTileIndices.size(), [&](uint32_t index) {
+			uint32_t tileIdx = acticeTileIndices[index];
+			const Tile& tile = tileGrid.tiles[tileIdx];
+			for (uint32_t triIdx : tile.triangleIndices) {
+				RasterizeTriangleForTile(fb, mesh, transformedMesh, triIdx, tile);
+			}
+		});
 
-        char filename[64];
-        std::snprintf(filename, sizeof(filename), "output_frame_%02d.ppm", frameCount);
+		auto t_raster_end = std::chrono::high_resolution_clock::now();
+		rasterTime += std::chrono::duration<double>(t_raster_end - t_raster_start).count();
 
-        fb.SaveToPPM(filename);
+        //char filename[64];
+        //std::snprintf(filename, sizeof(filename), "output_frame_%02d.ppm", frameCount);
 
-        std::cout << "Rendered frame " << frameCount << " to " << filename << std::endl;
+        //fb.SaveToPPM(filename);
+
+        //std::cout << "Rendered frame " << frameCount << " to " << filename << std::endl;
 
         frameCount++;
 	}
-	std::chrono::high_resolution_clock::time_point endTime = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> elapsedSeconds = endTime - startTime;
-	std::cout << "Total rendering time for " << MAX_FRAMES << " frames: " << elapsedSeconds.count() << " seconds." << std::endl;
+	std::cout << "Geometry & Binning Time: " << geomTime << " s" << std::endl;
+	std::cout << "Rasterization Time:    " << rasterTime << " s" << std::endl;
+	std::cout << "Rendered " << frameCount << " frames" << std::endl;
 	return 0;
 }

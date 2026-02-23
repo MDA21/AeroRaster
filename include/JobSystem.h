@@ -27,14 +27,16 @@ private:
 	void workerLoop(uint32_t threadId) {
 		uint32_t localGeneration = 0;
 		while (!terminatePool.load(std::memory_order_relaxed)) {
-			std::unique_lock<std::mutex> lock(wakeMutex);
-			wakeCV.wait(lock, [&] { return terminatePool.load(std::memory_order_relaxed) || localGeneration != workGeneration; });
+            {
+                std::unique_lock<std::mutex> lock(wakeMutex);
+                wakeCV.wait(lock, [&] { return terminatePool.load(std::memory_order_relaxed) || localGeneration != workGeneration; });
 
-			if (terminatePool.load(std::memory_order_relaxed)) {
-				break;
-			}
+                if (terminatePool.load(std::memory_order_relaxed)) {
+                    break;
+                }
 
-			localGeneration = workGeneration;
+                localGeneration = workGeneration;
+            }
 
 			while (true) {
 				uint32_t taskIdx = nextTaskIdx.fetch_add(1, std::memory_order_relaxed);
