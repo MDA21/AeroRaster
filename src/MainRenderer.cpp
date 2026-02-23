@@ -39,7 +39,8 @@ int main() {
 
 	double geomTime = 0.0;
 	double rasterTime = 0.0;
-	const int MAX_FRAMES = 10;
+	const int MAX_FRAMES = 100;
+
 	Vector3f eye(0.0f, 0.0f, 3.0f);
 	Vector3f target(0.0f, 0.0f, 0.0f);
 	Vector3f up(0.0f, 1.0f, 0.0f);
@@ -102,10 +103,10 @@ int main() {
 		auto t_raster_end = std::chrono::high_resolution_clock::now();
 		rasterTime += std::chrono::duration<double>(t_raster_end - t_raster_start).count();
 
-        char filename[64];
+        /*char filename[64];
         std::snprintf(filename, sizeof(filename), "output_frame_%02d.ppm", frameCount);
         fb.SaveToPPM(filename);
-        std::cout << "Rendered frame " << frameCount << " to " << filename << std::endl;
+        std::cout << "Rendered frame " << frameCount << " to " << filename << std::endl;*/
 
         frameCount++;
 	}
