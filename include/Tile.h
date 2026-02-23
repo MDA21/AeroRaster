@@ -56,6 +56,7 @@ public:
 		}
 	}
 
+	//多线程版本用这个构造函数，外部传入线程数
 	TileGrid(int w, int h, int size, uint32_t threads) {
 		width = w;
 		height = h;
@@ -101,8 +102,8 @@ public:
 	void BinTriangles(const MeshSoA& mesh, const MeshSoA& transformedMesh, int width, int height) {
 		size_t indexCount = mesh.indices.size();
 
-		//提取裸指针 (Raw Pointers)。
-		//告诉编译器这些内存绝对连续，消灭一切封装开销。
+		//提取裸指针 (Raw Pointers)
+		//告诉编译器这些内存绝对连续
 		const uint32_t* __restrict indices = mesh.indices.data();
 		const float* __restrict vx = transformedMesh.x.data();
 		const float* __restrict vy = transformedMesh.y.data();
@@ -126,9 +127,9 @@ public:
 			float minY_f = std::min(y0, std::min(y1, y2));
 			float maxY_f = std::max(y0, std::max(y1, y2));
 
-			//干掉致命的 std::floor 和 std::ceil 库函数调用！
+			//替代 std::floor 和 std::ceil 库函数调用
 			//C++ 浮点数强转 int 相当于直接截断向下取整 (只需 1 个 Cycle)
-			//对于 maxX_f，强转 int 后直接 +1，完美替代极慢的 std::ceil
+			//对于 maxX_f，强转 int 后直接 +1，替代极慢的 std::ceil
 			int triMinX = std::max(0, (int)minX_f);
 			int triMaxX = std::min(w_minus_1, (int)maxX_f + 1);
 			int triMinY = std::max(0, (int)minY_f);
@@ -187,7 +188,7 @@ public:
 				for (int ty = tileStartY; ty <= tileEndY; ++ty) {
 					for (int tx = tileStartX; tx <= tileEndX; ++tx) {
 						int tileIdx = ty * numTilesX + tx;
-						// 写入线程私有桶，绝对安全
+						//写入线程私有桶
 						threadLocalBins[threadId][tileIdx].push_back(i);
 					}
 				}

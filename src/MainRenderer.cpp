@@ -5,7 +5,6 @@
 #include "../include/Tile.h"
 #include "../include/Mesh.h"
 #include "../include/JobSystem.h"
-#include "../include/Texture.h"
 #include <vector>
 #include <immintrin.h>
 #include <iostream>
@@ -21,9 +20,9 @@ int main() {
 		return -1;
 	}
 
-    Texture diffuseMap("F:/VSproject/SIMDRenderer/resources/diablo3_pose/diablo3_pose_diffuse.tga");
-    Texture normalMap("F:/VSproject/SIMDRenderer/resources/diablo3_pose/diablo3_pose_nm.tga");
-    Texture specMap("F:/VSproject/SIMDRenderer/resources/diablo3_pose/diablo3_pose_spec.tga");
+    TextureSoA diffuseMap("F:/VSproject/SIMDRenderer/resources/diablo3_pose/diablo3_pose_diffuse.tga");
+    TextureSoA normalMap("F:/VSproject/SIMDRenderer/resources/diablo3_pose/diablo3_pose_nm.tga");
+    TextureSoA specMap("F:/VSproject/SIMDRenderer/resources/diablo3_pose/diablo3_pose_spec.tga");
 
 	MeshSoA transformedMesh;
 	transformedMesh.Resize(mesh.GetVertexCount());
@@ -33,7 +32,6 @@ int main() {
 	float height = 600.0f;
 	Framebuffer fb(width, height);
 	
-	//JobSystem jobSystem(1);
 	JobSystem jobSystem(std::thread::hardware_concurrency());
 	std::cout << "[Init] JobSystem started with " << jobSystem.GetThreadCount() << " threads." << std::endl;
 	TileGrid tileGrid(width, height, 64);
@@ -42,6 +40,18 @@ int main() {
 	double geomTime = 0.0;
 	double rasterTime = 0.0;
 	const int MAX_FRAMES = 10;
+	Vector3f eye(0.0f, 0.0f, 3.0f);
+	Vector3f target(0.0f, 0.0f, 0.0f);
+	Vector3f up(0.0f, 1.0f, 0.0f);
+	float fovY = 45.0f;
+	float aspect = width / height;
+	float zNear = 0.1f;
+	float zFar = 100.0f;
+
+	
+	Matrix4f view = Camera::GetViewMatrix(eye, target, up);
+	Matrix4f projection = Camera::GetProjectionMatrix(fovY, aspect, zNear, zFar);
+
 
 	std::chrono::high_resolution_clock::time_point startTime = std::chrono::high_resolution_clock::now();
 
@@ -52,28 +62,12 @@ int main() {
         float angle = frameCount * 0.5f;
 		Matrix4f model = Camera::GetModelMatrix(angle, Vector3f(0.0f, 0.0f, 0.0f));
 
-		Vector3f eye(0.0f, 0.0f, 3.0f);
-		Vector3f target(0.0f, 0.0f, 0.0f);
-		Vector3f up(0.0f, 1.0f, 0.0f);
-		Matrix4f view = Camera::GetViewMatrix(eye, target, up);
-
-		float fovY = 45.0f;
-		float aspect = width / height;
-		float zNear = 0.1f;
-		float zFar = 100.0f;
-		Matrix4f projection = Camera::GetProjectionMatrix(fovY, aspect, zNear, zFar);
-
 		Matrix4f mvp = projection * view * model;
 
 		//几何处理时间
 		auto t_geom_start = std::chrono::high_resolution_clock::now();
 
 		ProcessGeometryAVX2(mesh, transformedMesh, mvp, model, width, height);
-		//TransformVerticesAVX2(mesh, transformedMesh, mvp);
-
-		//PerspectiveDivideAVX2(transformedMesh);
-
-		//ViewportTransformAVX2(transformedMesh, width, height);
 
         
 		

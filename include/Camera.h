@@ -3,6 +3,8 @@
 #include <cmath> 
 #include <Eigen/Dense>
 
+using namespace Eigen;
+
 class Camera {
 public:
 	static Matrix4f GetModelMatrix(float angle, const Vector3f& translation) {

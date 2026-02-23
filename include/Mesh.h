@@ -4,15 +4,108 @@
 #include <iostream>
 #include <immintrin.h>
 #include <Eigen/Dense>
+#include <string>
+#include "stb_image.h"
 
 using Matrix4f = Eigen::Matrix4f;
 using Vector4f = Eigen::Vector4f;
 using Vector3f = Eigen::Vector3f;
 
+struct TextureSoA {
+    int width = 0, height = 0, channels = 0;
+    std::vector<float> r, g, b, a;
+
+    TextureSoA() = default;
+
+    TextureSoA(const std::string& filename) {
+        unsigned char* data = stbi_load(filename.c_str(), &width, &height, &channels, 4);
+        if (!data) {
+            std::cerr << "Failed to load texture: " << filename << std::endl;
+            return;
+        }
+
+        std::cout << "Loaded texture: " << filename << " (" << width << "x" << height << ")" << std::endl;
+
+        size_t size = width * height;
+        r.resize(size);
+        g.resize(size);
+        b.resize(size);
+        a.resize(size);
+
+        // Convert to SoA and normalize to [0, 1]
+        for (size_t i = 0; i < size; ++i) {
+            r[i] = data[i * 4 + 0] / 255.0f;
+            g[i] = data[i * 4 + 1] / 255.0f;
+            b[i] = data[i * 4 + 2] / 255.0f;
+            a[i] = data[i * 4 + 3] / 255.0f;
+        }
+
+        stbi_image_free(data);
+    }
+
+    //采样（标量）
+    Eigen::Vector4f Sample(float u, float v) const {
+        if (r.empty()) return Eigen::Vector4f(1.0f, 0.0f, 1.0f, 1.0f); // Pink error
+
+        u = u - std::floor(u);
+        v = v - std::floor(v);
+
+        int x = std::max(0, std::min((int)(u * width), width - 1));
+        int y = std::max(0, std::min((int)(v * height), height - 1));
+        int idx = y * width + x;
+
+        return Eigen::Vector4f(r[idx], g[idx], b[idx], a[idx]);
+    }
+
+	//采样（AVX2版本）
+    void SampleAVX2(__m256 u, __m256 v, __m256& out_r, __m256& out_g, __m256& out_b, __m256& out_a) const {
+        if (r.empty()) {
+            out_r = _mm256_set1_ps(1.0f);
+            out_g = _mm256_setzero_ps();
+            out_b = _mm256_set1_ps(1.0f);
+            out_a = _mm256_set1_ps(1.0f);
+            return;
+        }
+
+        //Wrap UVs: u - floor(u)
+        u = _mm256_sub_ps(u, _mm256_floor_ps(u));
+        v = _mm256_sub_ps(v, _mm256_floor_ps(v));
+
+        // Scale by dimensions
+        __m256 w = _mm256_set1_ps((float)width);
+        __m256 h = _mm256_set1_ps((float)height);
+        
+        __m256 x_f = _mm256_mul_ps(u, w);
+        __m256 y_f = _mm256_mul_ps(v, h);
+
+        // Convert to int
+        __m256i x_i = _mm256_cvttps_epi32(x_f);
+        __m256i y_i = _mm256_cvttps_epi32(y_f);
+
+        //Clamp
+        __m256i max_x = _mm256_set1_epi32(width - 1);
+        __m256i max_y = _mm256_set1_epi32(height - 1);
+        __m256i zero = _mm256_setzero_si256();
+
+        x_i = _mm256_max_epi32(zero, _mm256_min_epi32(x_i, max_x));
+        y_i = _mm256_max_epi32(zero, _mm256_min_epi32(y_i, max_y));
+
+        //Calculate index: y * width + x
+        __m256i width_i = _mm256_set1_epi32(width);
+        __m256i idx = _mm256_add_epi32(_mm256_mullo_epi32(y_i, width_i), x_i);
+
+        //Gather
+        out_r = _mm256_i32gather_ps(r.data(), idx, 4);
+        out_g = _mm256_i32gather_ps(g.data(), idx, 4);
+        out_b = _mm256_i32gather_ps(b.data(), idx, 4);
+        out_a = _mm256_i32gather_ps(a.data(), idx, 4);
+    }
+};
+
+
 struct alignas(32) MeshSoA{
     std::vector<float> x, y, z, w;
     std::vector<float> u, v;
-    std::vector<float> r, g, b, a;
     std::vector<float> nx, ny, nz;
     std::vector<float> tx, ty, tz, tw; // Tangent + Handedness
     std::vector<float> wx, wy, wz;     // World Position
@@ -27,7 +120,6 @@ struct alignas(32) MeshSoA{
     void Reserve(size_t n) {
         x.reserve(n); y.reserve(n); z.reserve(n); w.reserve(n);
         u.reserve(n); v.reserve(n);
-        r.reserve(n); g.reserve(n); b.reserve(n); a.reserve(n);
         nx.reserve(n); ny.reserve(n); nz.reserve(n);
         tx.reserve(n); ty.reserve(n); tz.reserve(n); tw.reserve(n);
         wx.reserve(n); wy.reserve(n); wz.reserve(n);
@@ -36,7 +128,6 @@ struct alignas(32) MeshSoA{
     void Resize(size_t n) {
         x.resize(n); y.resize(n); z.resize(n); w.resize(n);
         u.resize(n); v.resize(n);
-        r.resize(n); g.resize(n); b.resize(n); a.resize(n);
         nx.resize(n); ny.resize(n); nz.resize(n);
         tx.resize(n); ty.resize(n); tz.resize(n); tw.resize(n);
         wx.resize(n); wy.resize(n); wz.resize(n);

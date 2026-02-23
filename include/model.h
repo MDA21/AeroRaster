@@ -70,7 +70,7 @@ public:
                         norm.z() = attrib.normals[3 * index.normal_index + 2];
                     }
 
-                    // Initial tangent (0,0,0,0)
+                    //≥ı º∑®œﬂ(0,0,0,0)
                     outMesh.PushVertex(pos, uv, norm, Eigen::Vector4f(0.0f, 0.0f, 0.0f, 0.0f));
 
                     uint32_t newIndex = (uint32_t)(outMesh.GetVertexCount() - 1);
@@ -83,7 +83,7 @@ public:
             }
         }
 
-        // Compute Tangents
+        //Compute Tangents
         ComputeTangents(outMesh);
 
         outMesh.PadToAlign8();
@@ -148,10 +148,10 @@ private:
             Eigen::Vector3f n(mesh.nx[a], mesh.ny[a], mesh.nz[a]);
             Eigen::Vector3f t = tan1[a];
 
-            // Gram-Schmidt orthogonalize
+            //Gram-Schmidt orthogonalize
             Eigen::Vector3f tangent = (t - n * n.dot(t)).normalized();
             
-            // Calculate handedness
+            //Calculate handedness
             float w = (n.cross(t).dot(tan2[a]) < 0.0f) ? -1.0f : 1.0f;
 
             mesh.tx[a] = tangent.x();

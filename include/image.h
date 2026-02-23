@@ -13,7 +13,7 @@ struct Framebuffer {
     vector<float> depthBuffer;
 
     Framebuffer(int w, int h) : width(w), height(h) {
-        //增加 16 个像素的 padding 防护，为无条件 SIMD 内存指令保驾护航
+        //增加 16 个像素的 padding 防护，可能会用无条件 SIMD 内存指令
         colorBuffer.resize(w * h + 16, 0x202020);
         depthBuffer.resize(w * h + 16, 1.0f);
     }
@@ -23,7 +23,7 @@ struct Framebuffer {
         fill(depthBuffer.begin(), depthBuffer.end(), 1.0f);
     }
 
-    // 简单的 PPM 图片输出，用于验证渲染结果
+    //简单的 PPM 图片输出
     void SaveToPPM(const string& filename) {
         ofstream ofs(filename, ios::binary);
         ofs << "P6\n" << width << " " << height << "\n255\n";
