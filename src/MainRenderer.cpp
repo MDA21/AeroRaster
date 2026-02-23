@@ -81,15 +81,15 @@ int main() {
 			}
 		});
 
-		auto t_raster_end = std::chrono::high_resolution_clock::now();
+		/*auto t_raster_end = std::chrono::high_resolution_clock::now();
 		rasterTime += std::chrono::duration<double>(t_raster_end - t_raster_start).count();
 
-        //char filename[64];
-        //std::snprintf(filename, sizeof(filename), "output_frame_%02d.ppm", frameCount);
+        char filename[64];
+        std::snprintf(filename, sizeof(filename), "output_frame_%02d.ppm", frameCount);
 
-        //fb.SaveToPPM(filename);
+        fb.SaveToPPM(filename);
 
-        //std::cout << "Rendered frame " << frameCount << " to " << filename << std::endl;
+        std::cout << "Rendered frame " << frameCount << " to " << filename << std::endl;*/
 
         frameCount++;
 	}

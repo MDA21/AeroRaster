@@ -13,8 +13,9 @@ struct Framebuffer {
     vector<float> depthBuffer;
 
     Framebuffer(int w, int h) : width(w), height(h) {
-        colorBuffer.resize(w * h, 0x202020); // 深灰色背景
-        depthBuffer.resize(w * h, 1.0f);     // 深度初始化为1.0 (远裁剪面)
+        //增加 16 个像素的 padding 防护，为无条件 SIMD 内存指令保驾护航
+        colorBuffer.resize(w * h + 16, 0x202020);
+        depthBuffer.resize(w * h + 16, 1.0f);
     }
 
     void Clear() {
