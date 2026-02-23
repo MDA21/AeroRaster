@@ -276,8 +276,7 @@ void RasterizeTriangleAVX(
     }
 }
 
-inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const MeshSoA& transformedMesh, uint32_t triIdx, const Tile& tile,
-    long long& colorChanged, long long& depthChanged, long long& invalidBBoxCount, long long& trianglePassedCount, long long& maskValidCount) {
+inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const MeshSoA& transformedMesh, uint32_t triIdx, const Tile& tile) {
     uint32_t i0 = mesh.indices[triIdx];
     uint32_t i1 = mesh.indices[triIdx + 1];
     uint32_t i2 = mesh.indices[triIdx + 2];
@@ -325,11 +324,10 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
     int maxY = std::min(triMaxY, tile.endY);
 
     if (minX > maxX || minY > maxY) {
-        invalidBBoxCount++;
-        return; // 再次确保交集有效
+        return;
     }
 
-    trianglePassedCount++;
+    
 
     // 注意：TILE_SIZE 是 64（4的倍数），所以 tile.startX 也是 4的倍数。
     // 这里的按位与操作只会把 minX 对齐到 Tile 内部或边界的像素块起点，绝不会越界到左侧 Tile！
@@ -394,9 +392,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
             __m256 finalMask = _mm256_and_ps(_mm256_and_ps(mask0, mask1), mask2);
 
             int maskBit = _mm256_movemask_ps(finalMask);
-            if (maskBit == 0) continue; // 如果 8 个像素都不在三角形内，直接跳过计算
-
-            maskValidCount++;
+            if (maskBit == 0) continue;
 
             //计算重心坐标 lambda
             __m256 lambda0 = _mm256_mul_ps(eval0, v_invArea);
@@ -425,10 +421,9 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
 
                 int pixelIdx = py * fb.width + px;
 
-                //深度测试
                 if (z_arr[i] >= fb.depthBuffer[pixelIdx]) continue;
                 fb.depthBuffer[pixelIdx] = z_arr[i];
-                depthChanged++;
+                
 
                 //延迟透视校正
                 //只有通过了深度测试的像素，才舍得花算力去计算 1/W 和 UV
@@ -457,7 +452,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
                 //color = (uint8_t)(color * (1.0f - depthVal));
 
                 fb.colorBuffer[pixelIdx] = (color << 16) | (color << 8) | color;
-                colorChanged++;
+                
             }
         }
     }
