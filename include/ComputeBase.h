@@ -379,7 +379,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
     
 
     // 注意：TILE_SIZE 是 64（4的倍数），所以 tile.startX 也是 4的倍数。
-    // 这里的按位与操作只会把 minX 对齐到 Tile 内部或边界的像素块起点，绝不会越界到左侧 Tile！
+    // 这里的按位与操作只会把 minX 对齐到 Tile 内部或边界的像素块起点，绝不会越界到左侧 Tile
     minX &= ~3;
     minY &= ~1;
 
@@ -479,14 +479,13 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
                 // _blsr_u32 硬件级清除最低位的 1，进入下一个循环
                 maskBit = _blsr_u32(maskBit);
 
-                int px = x + (i & 3); // i % 4 优化
-                int py = y + (i >> 2); // i / 4 优化
+                int px = x + (i & 3); // i % 4 
+                int py = y + (i >> 2); // i / 4 
 
                 if (px > tile.endX || py > tile.endY || px < tile.startX || py < tile.startY) continue;
 
                 int pixelIdx = py * fb.width + px;
 
-                // 纯写入模式，拒绝 RMW
                 if (z_arr[i] >= fb.depthBuffer[pixelIdx]) continue;
                 fb.depthBuffer[pixelIdx] = z_arr[i];
 

@@ -27,11 +27,12 @@ int main() {
 	float width = 800.0f;
 	float height = 600.0f;
 	Framebuffer fb(width, height);
-	TileGrid tileGrid(width, height, 64);
-
+	
 	//JobSystem jobSystem(1);
 	JobSystem jobSystem(std::thread::hardware_concurrency());
 	std::cout << "[Init] JobSystem started with " << jobSystem.GetThreadCount() << " threads." << std::endl;
+	TileGrid tileGrid(width, height, 64);
+	//TileGrid tileGrid(width, height, 64, jobSystem.GetThreadCount());
 
 	double geomTime = 0.0;
 	double rasterTime = 0.0;
@@ -58,6 +59,7 @@ int main() {
 		
 		tileGrid.ClearBins();
 		tileGrid.BinTriangles(mesh, transformedMesh, width, height);
+		//tileGrid.BinTrianglesMultithreaded(mesh, transformedMesh, width, height, jobSystem);
 
 		auto t_geom_end = std::chrono::high_resolution_clock::now();
 		geomTime += std::chrono::duration<double>(t_geom_end - t_geom_start).count();
