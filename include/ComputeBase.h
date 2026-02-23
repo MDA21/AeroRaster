@@ -450,7 +450,7 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
             int maskBit = _mm256_movemask_ps(finalMask);
             if (_mm256_movemask_ps(finalMask) == 0) continue;
 
-			//边界检查，防止越界
+            //边界检查，防止越界
             __m256i v_px_i = _mm256_add_epi32(_mm256_set1_epi32(x), _mm256_setr_epi32(0, 1, 2, 3, 0, 1, 2, 3));
             __m256i bx = _mm256_and_si256(_mm256_cmpgt_epi32(v_px_i, v_minX_minus1), _mm256_cmpgt_epi32(v_maxX_plus1, v_px_i));
             __m256i by = _mm256_and_si256(_mm256_cmpgt_epi32(v_py_i, v_minY_minus1), _mm256_cmpgt_epi32(v_maxY_plus1, v_py_i));
@@ -463,75 +463,53 @@ inline void RasterizeTriangleForTile(Framebuffer& fb, const MeshSoA& mesh, const
             __m256 lambda2 = _mm256_mul_ps(eval2, v_invArea);
 
             __m256 z_out = _mm256_fmadd_ps(lambda2, v_z2, _mm256_fmadd_ps(lambda1, v_z1, _mm256_mul_ps(lambda0, v_z0)));
+
             alignas(32) float z_arr[8];
-            
-            //Load-Blend-Store (LBS)
-            // ==========================================
-            float* dptr0 = &fb.depthBuffer[y * fb.width + x];
-            float* dptr1 = &fb.depthBuffer[(y + 1) * fb.width + x];
+            _mm256_store_ps(z_arr, z_out);
 
-            // 1. 暴力无条件加载背景深度 (极速)
-            __m128 old_d0 = _mm_loadu_ps(dptr0);
-            __m128 old_d1 = _mm_loadu_ps(dptr1);
-            __m256 v_old_depth = _mm256_insertf128_ps(_mm256_castps128_ps256(old_d0), old_d1, 1);
+            bool uvCalculated = false;
+            alignas(32) float u_arr[8], v_arr[8];
 
-            // 2. 深度比较与掩码合并
-            __m256 depthMask = _mm256_cmp_ps(z_out, v_old_depth, _CMP_LT_OQ);
-            finalMask = _mm256_and_ps(finalMask, depthMask);
-            if (_mm256_movemask_ps(finalMask) == 0) continue; // 依然保留这层早期打断
+            maskBit = _mm256_movemask_ps(finalMask);
 
-            // 3. 寄存器内极速混合 (1 Cycle!)
-            // 如果 finalMask 为 1，选择 z_out; 如果为 0，保留 v_old_depth
-            __m256 new_depth = _mm256_blendv_ps(v_old_depth, z_out, finalMask);
+            //跳跃式遍历
+            while (maskBit) {
+                // _tzcnt_u32 硬件级计算末尾有几个 0，直接定位到第一个为 1 的位
+                int i = _tzcnt_u32(maskBit);
+                // _blsr_u32 硬件级清除最低位的 1，进入下一个循环
+                maskBit = _blsr_u32(maskBit);
 
-            // 4. 暴力无条件拍回内存 (极速)
-            _mm_storeu_ps(dptr0, _mm256_castps256_ps128(new_depth));
-            _mm_storeu_ps(dptr1, _mm256_extractf128_ps(new_depth, 1));
+                int px = x + (i & 3); // i % 4 优化
+                int py = y + (i >> 2); // i / 4 优化
 
-            // ==========================================
-            // 计算 1/W, UV, 以及 棋盘格 逻辑 (保持不变)
-            // ==========================================
-            __m256 inv_w = _mm256_fmadd_ps(lambda2, v_w2, _mm256_fmadd_ps(lambda1, v_w1, _mm256_mul_ps(lambda0, v_w0)));
-            __m256 w_recip = _mm256_rcp_ps(inv_w);
-            __m256 u_out = _mm256_fmadd_ps(lambda2, v_preU2, _mm256_fmadd_ps(lambda1, v_preU1, _mm256_mul_ps(lambda0, v_preU0)));
-            __m256 v_out = _mm256_fmadd_ps(lambda2, v_preV2, _mm256_fmadd_ps(lambda1, v_preV1, _mm256_mul_ps(lambda0, v_preV0)));
-            __m256 real_u = _mm256_mul_ps(u_out, w_recip);
-            __m256 real_v = _mm256_mul_ps(v_out, w_recip);
+                if (px > tile.endX || py > tile.endY || px < tile.startX || py < tile.startY) continue;
 
-            __m256 u20 = _mm256_mul_ps(real_u, _mm256_set1_ps(20.0f));
-            __m256 v20 = _mm256_mul_ps(real_v, _mm256_set1_ps(20.0f));
-            __m256i iu = _mm256_cvttps_epi32(u20);
-            __m256i iv = _mm256_cvttps_epi32(v20);
-            __m256i sum = _mm256_add_epi32(iu, iv);
-            __m256i check = _mm256_and_si256(sum, _mm256_set1_epi32(1));
-            __m256i color_val = _mm256_add_epi32(_mm256_set1_epi32(80), _mm256_mullo_epi32(check, _mm256_set1_epi32(140)));
+                int pixelIdx = py * fb.width + px;
 
-            __m256i c_shl16 = _mm256_slli_epi32(color_val, 16);
-            __m256i c_shl8 = _mm256_slli_epi32(color_val, 8);
-            __m256i final_color = _mm256_or_si256(_mm256_or_si256(c_shl16, c_shl8), color_val);
+                // 纯写入模式，拒绝 RMW
+                if (z_arr[i] >= fb.depthBuffer[pixelIdx]) continue;
+                fb.depthBuffer[pixelIdx] = z_arr[i];
 
-            // ==========================================
-            // 颜色写入也采用 LBS 模式
-            // ==========================================
-            uint32_t* cptr0 = &fb.colorBuffer[y * fb.width + x];
-            uint32_t* cptr1 = &fb.colorBuffer[(y + 1) * fb.width + x];
+                //延迟求值：只要有一个像素通过了深度测试，才去算极其昂贵的 SIMD 1/W 和 UV
+                if (!uvCalculated) {
+                    __m256 inv_w = _mm256_fmadd_ps(lambda2, v_w2, _mm256_fmadd_ps(lambda1, v_w1, _mm256_mul_ps(lambda0, v_w0)));
+                    __m256 w_recip = _mm256_rcp_ps(inv_w);
+                    __m256 u_out = _mm256_fmadd_ps(lambda2, v_preU2, _mm256_fmadd_ps(lambda1, v_preU1, _mm256_mul_ps(lambda0, v_preU0)));
+                    __m256 v_out = _mm256_fmadd_ps(lambda2, v_preV2, _mm256_fmadd_ps(lambda1, v_preV1, _mm256_mul_ps(lambda0, v_preV0)));
 
-            // 1. 无条件加载背景颜色
-            __m128i old_c0 = _mm_loadu_si128((__m128i*)cptr0);
-            __m128i old_c1 = _mm_loadu_si128((__m128i*)cptr1);
-            __m256i v_old_color = _mm256_inserti128_si256(_mm256_castsi128_si256(old_c0), old_c1, 1);
+                    _mm256_store_ps(u_arr, _mm256_mul_ps(u_out, w_recip));
+                    _mm256_store_ps(v_arr, _mm256_mul_ps(v_out, w_recip));
+                    uvCalculated = true;
+                }
 
-            // 2. 利用 Float 的 blendv 强行混合整数 (位级别的选择，完美兼容)
-            __m256 blended_color_ps = _mm256_blendv_ps(
-                _mm256_castsi256_ps(v_old_color),
-                _mm256_castsi256_ps(final_color),
-                finalMask
-            );
-            __m256i blended_color = _mm256_castps_si256(blended_color_ps);
+                //棋盘格
+                float u = u_arr[i];
+                float v = v_arr[i];
+                int check = ((int)(u * 20.0f) + (int)(v * 20.0f)) & 1;
+                uint8_t color = 80 + check * 140;
 
-            // 3. 无条件写入
-            _mm_storeu_si128((__m128i*)cptr0, _mm256_castsi256_si128(blended_color));
-            _mm_storeu_si128((__m128i*)cptr1, _mm256_extracti128_si256(blended_color, 1));
+                fb.colorBuffer[pixelIdx] = (color << 16) | (color << 8) | color;
+            }
         }
     }
 }
