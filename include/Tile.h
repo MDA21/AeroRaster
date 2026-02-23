@@ -120,7 +120,7 @@ public:
 			float x2 = vx[i2], y2 = vy[i2];
 
 			//纯标量极速 Min/Max，干掉 std::initializer_list
-			//编译器会直接将其翻译为极速的 minss 和 maxss 指令！
+			//编译器会直接将其翻译为极速的 minss 和 maxss 指令
 			float minX_f = std::min(x0, std::min(x1, x2));
 			float maxX_f = std::max(x0, std::max(x1, x2));
 			float minY_f = std::min(y0, std::min(y1, y2));
@@ -194,7 +194,7 @@ public:
 			}
 			});
 
-		//REDUCE (极速拼装)
+		//拼装
 		//按 Tile 维度并行，每个线程独占一个 Tile 的拼装任务
 
 		uint32_t totalTiles = numTilesX * numTilesY;
