@@ -44,14 +44,15 @@ int main() {
         fb.Clear();
 		Matrix4f mvp = Camera::ComputeMVP(width, height, frameCount);
 
-		//¼ÇÂ¼¼¸ºÎ´¦ÀíÊ±¼ä
+		//å‡ ä½•å¤„ç†æ—¶é—´
 		auto t_geom_start = std::chrono::high_resolution_clock::now();
 
-		TransformVerticesAVX2(mesh, transformedMesh, mvp);
+		ProcessGeometryAVX2(mesh, transformedMesh, mvp, width, height);
+		//TransformVerticesAVX2(mesh, transformedMesh, mvp);
 
-		PerspectiveDivideAVX2(transformedMesh);
+		//PerspectiveDivideAVX2(transformedMesh);
 
-		ViewportTransformAVX2(transformedMesh, width, height);
+		//ViewportTransformAVX2(transformedMesh, width, height);
 
         
 		
@@ -69,7 +70,7 @@ int main() {
 			}
 		}
 
-		//¼ÇÂ¼¹âÕ¤»¯Ê±¼ä
+		//å…‰æ …åŒ–æ—¶é—´
 		auto t_raster_start = std::chrono::high_resolution_clock::now();
 
 		jobSystem.Dispatch((uint32_t)acticeTileIndices.size(), [&](uint32_t index) {

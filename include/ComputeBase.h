@@ -121,6 +121,55 @@ void ViewportTransformAVX2(MeshSoA& mesh, float width, float height) {
     }
 }
 
+void ProcessGeometryAVX2(const MeshSoA& in, MeshSoA& out, const Matrix4f& mvp, float width, float height) {
+    size_t count = in.GetVertexCount();
+
+    // Prepare MVP matrix constants
+    __m256 m00 = _mm256_set1_ps(mvp(0, 0)); __m256 m01 = _mm256_set1_ps(mvp(0, 1));
+    __m256 m02 = _mm256_set1_ps(mvp(0, 2)); __m256 m03 = _mm256_set1_ps(mvp(0, 3));
+    __m256 m10 = _mm256_set1_ps(mvp(1, 0)); __m256 m11 = _mm256_set1_ps(mvp(1, 1));
+    __m256 m12 = _mm256_set1_ps(mvp(1, 2)); __m256 m13 = _mm256_set1_ps(mvp(1, 3));
+    __m256 m20 = _mm256_set1_ps(mvp(2, 0)); __m256 m21 = _mm256_set1_ps(mvp(2, 1));
+    __m256 m22 = _mm256_set1_ps(mvp(2, 2)); __m256 m23 = _mm256_set1_ps(mvp(2, 3));
+    __m256 m30 = _mm256_set1_ps(mvp(3, 0)); __m256 m31 = _mm256_set1_ps(mvp(3, 1));
+    __m256 m32 = _mm256_set1_ps(mvp(3, 2)); __m256 m33 = _mm256_set1_ps(mvp(3, 3));
+
+    // Prepare Viewport constants
+    __m256 half_width = _mm256_set1_ps(width * 0.5f);
+    __m256 half_height = _mm256_set1_ps(height * 0.5f);
+    __m256 one = _mm256_set1_ps(1.0f);
+
+    for (size_t i = 0; i < count; i += 8) {
+        // 1. TransformVerticesAVX2 logic
+        __m256 vx = _mm256_loadu_ps(&in.x[i]);
+        __m256 vy = _mm256_loadu_ps(&in.y[i]);
+        __m256 vz = _mm256_loadu_ps(&in.z[i]);
+        // Assume w is 1.0 for input vertices
+
+        __m256 x = _mm256_fmadd_ps(vz, m02, _mm256_fmadd_ps(vy, m01, _mm256_fmadd_ps(vx, m00, m03)));
+        __m256 y = _mm256_fmadd_ps(vz, m12, _mm256_fmadd_ps(vy, m11, _mm256_fmadd_ps(vx, m10, m13)));
+        __m256 z = _mm256_fmadd_ps(vz, m22, _mm256_fmadd_ps(vy, m21, _mm256_fmadd_ps(vx, m20, m23)));
+        __m256 w = _mm256_fmadd_ps(vz, m32, _mm256_fmadd_ps(vy, m31, _mm256_fmadd_ps(vx, m30, m33)));
+
+        // 2. PerspectiveDivideAVX2 logic
+        __m256 inv_w = _mm256_div_ps(one, w);
+        x = _mm256_mul_ps(x, inv_w);
+        y = _mm256_mul_ps(y, inv_w);
+        z = _mm256_mul_ps(z, inv_w);
+        // Store inv_w as w in output, consistent with PerspectiveDivideAVX2
+
+        // 3. ViewportTransformAVX2 logic
+        x = _mm256_fmadd_ps(x, half_width, half_width);
+        y = _mm256_fnmadd_ps(y, half_height, half_height);
+
+        // Store results
+        _mm256_storeu_ps(&out.x[i], x);
+        _mm256_storeu_ps(&out.y[i], y);
+        _mm256_storeu_ps(&out.z[i], z);
+        _mm256_storeu_ps(&out.w[i], inv_w);
+    }
+}
+
 inline float GetEdgeBias(float dx, float dy) {
 	//top-left rule: 当边界上的像素中心在边界的上方或左侧时，包含该像素；当在边界的下方或右侧时，不包含该像素
     bool isTopLeft = (dy < 0.0f) || (dy == 0.0f && dx > 0.0f);
